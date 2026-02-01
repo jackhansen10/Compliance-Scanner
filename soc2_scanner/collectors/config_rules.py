@@ -23,16 +23,22 @@ def collect_config_rules(session: boto3.Session, regions: List[str]) -> Dict[str
             errors.append(format_error("config", region, rule_error))
         if not region_rules:
             continue
-        compliance, compliance_error = safe_call(
-            client.describe_compliance_by_config_rule,
-            ConfigRuleNames=[rule.get("ConfigRuleName") for rule in region_rules[:50]],
-        )
-        if compliance_error:
-            errors.append(format_error("config", region, compliance_error))
-        compliance_map = {
-            item.get("ConfigRuleName"): item.get("Compliance", {}).get("ComplianceType")
-            for item in (compliance.get("ComplianceByConfigRules", []) if compliance else [])
-        }
+        compliance_map: Dict[str, str] = {}
+        rule_names = [rule.get("ConfigRuleName") for rule in region_rules if rule.get("ConfigRuleName")]
+        batch_size = 25
+        for start in range(0, len(rule_names), batch_size):
+            batch = rule_names[start : start + batch_size]
+            compliance, compliance_error = safe_call(
+                client.describe_compliance_by_config_rule,
+                ConfigRuleNames=batch,
+            )
+            if compliance_error:
+                errors.append(format_error("config", region, compliance_error))
+                continue
+            for item in compliance.get("ComplianceByConfigRules", []) if compliance else []:
+                compliance_map[item.get("ConfigRuleName")] = item.get("Compliance", {}).get(
+                    "ComplianceType"
+                )
         for rule in region_rules:
             rules.append(
                 {

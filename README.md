@@ -153,11 +153,15 @@ includes a short gap list based on evidence presence.
 
 ## Output
 
-Artifacts are written to the output directory:
+Artifacts are written to a timestamped subdirectory (one per run):
+
+Example: `reports/20260201T144724Z/`
 
 - `evidence.json` — full evidence payload with metadata
 - `evidence_summary.csv` — summary table by control
 - `evidence.json.sha256` — hash of the JSON report for integrity
+- `run_completeness.json` — run metadata and artifact manifest
+- `run_completeness.json.sha256` — hash of the completeness file
 
 ## Notes
 

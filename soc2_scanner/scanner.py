@@ -32,6 +32,10 @@ def _utc_timestamp() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+def _run_id() -> str:
+    return datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+
+
 def _ensure_output_dir(output_dir: str) -> None:
     os.makedirs(output_dir, exist_ok=True)
 
@@ -135,6 +139,9 @@ def _build_evidence_entries(
 
 def run_scan(config: ScanConfig) -> Dict[str, Any]:
     _ensure_output_dir(config.output_dir)
+    run_id = _run_id()
+    run_dir = os.path.join(config.output_dir, run_id)
+    _ensure_output_dir(run_dir)
 
     session = boto3.Session(
         profile_name=config.profile,
@@ -215,6 +222,7 @@ def run_scan(config: ScanConfig) -> Dict[str, Any]:
 
     payload = {
         "generated_at": _utc_timestamp(),
+        "run_id": run_id,
         "controls": config.controls,
         "regions": regions,
         "account_id": identity["account_id"],
@@ -225,11 +233,11 @@ def run_scan(config: ScanConfig) -> Dict[str, Any]:
         "accounts": account_results if len(account_results) > 1 else [],
     }
 
-    json_path = os.path.join(config.output_dir, "evidence.json")
+    json_path = os.path.join(run_dir, "evidence.json")
     with open(json_path, "w", encoding="utf-8") as handle:
         json.dump(payload, handle, indent=2, sort_keys=True)
 
-    csv_path = os.path.join(config.output_dir, "evidence_summary.csv")
+    csv_path = os.path.join(run_dir, "evidence_summary.csv")
     summary_rows: List[Dict[str, Any]] = []
     for account in account_results:
         for entry in account.get("evidence", []):
@@ -249,7 +257,28 @@ def run_scan(config: ScanConfig) -> Dict[str, Any]:
 
     hash_path = _write_hash_file(json_path)
 
+    completeness_path = os.path.join(run_dir, "run_completeness.json")
+    completeness_payload = {
+        "run_id": run_id,
+        "generated_at": payload["generated_at"],
+        "account_id": payload["account_id"],
+        "caller_arn": payload["caller_arn"],
+        "regions": regions,
+        "controls": config.controls,
+        "identity_error": payload["identity_error"],
+        "organization_error": organization_error,
+        "account_count": len(account_results),
+        "artifacts": {
+            "evidence_json": os.path.basename(json_path),
+            "evidence_csv": os.path.basename(csv_path),
+            "evidence_hash": os.path.basename(hash_path),
+        },
+    }
+    with open(completeness_path, "w", encoding="utf-8") as handle:
+        json.dump(completeness_payload, handle, indent=2, sort_keys=True)
+    completeness_hash = _write_hash_file(completeness_path)
+
     return {
-        "artifacts": [json_path, csv_path, hash_path],
+        "artifacts": [json_path, csv_path, hash_path, completeness_path, completeness_hash],
         "identity_error": identity["identity_error"],
     }
