@@ -36,6 +36,8 @@ def _merge_cli_config(args: argparse.Namespace) -> Dict[str, Any]:
         config["all_accounts"] = True
     _set_if(args.role_name, "role_name")
     _set_if(args.external_id, "external_id")
+    if args.external_ids:
+        config["external_ids"] = json.loads(args.external_ids)
     return config
 
 
@@ -82,6 +84,10 @@ def build_parser() -> argparse.ArgumentParser:
         "--external-id",
         help="External ID to use when assuming roles",
     )
+    parser.add_argument(
+        "--external-ids",
+        help="JSON map of account_id to external_id",
+    )
     return parser
 
 
@@ -103,6 +109,7 @@ def main() -> None:
         all_accounts=bool(merged.get("all_accounts")),
         role_name=merged.get("role_name") or "OrganizationAccountAccessRole",
         external_id=merged.get("external_id"),
+        external_ids=merged.get("external_ids") or {},
     )
 
     result = run_scan(config)

@@ -100,12 +100,24 @@ Use a JSON config file (CLI args override config values):
   "output": "reports",
   "all_accounts": true,
   "role_name": "OrganizationAccountAccessRole",
-  "external_id": "my-external-id"
+  "external_id": "my-external-id",
+  "external_ids": {
+    "111111111111": "child-external-id-1",
+    "222222222222": "child-external-id-2"
+  }
 }
 ```
 
 ```bash
 python -m soc2_scanner --config soc2-config.json
+```
+
+Pass per-account external IDs on the CLI (JSON string):
+
+```bash
+python -m soc2_scanner \
+  --all-accounts \
+  --external-ids '{"111111111111":"child-external-id-1","222222222222":"child-external-id-2"}'
 ```
 
 ## Control coverage (AWS-only)

@@ -25,6 +25,7 @@ class ScanConfig:
     all_accounts: bool = False
     role_name: str = "OrganizationAccountAccessRole"
     external_id: Optional[str] = None
+    external_ids: Dict[str, str] = field(default_factory=dict)
 
 
 def _utc_timestamp() -> str:
@@ -175,8 +176,9 @@ def run_scan(config: ScanConfig) -> Dict[str, Any]:
             account_identity = identity
             assume_error = None
         else:
+            account_external_id = config.external_ids.get(account_id) or config.external_id
             account_session, assume_error = _assume_role_session(
-                session, account_id, config.role_name, config.external_id
+                session, account_id, config.role_name, account_external_id
             )
             if account_session:
                 account_identity = _get_account_identity(account_session)
