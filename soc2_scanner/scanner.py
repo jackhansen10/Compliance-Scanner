@@ -241,6 +241,13 @@ def run_scan(config: ScanConfig) -> Dict[str, Any]:
     summary_rows: List[Dict[str, Any]] = []
     for account in account_results:
         for entry in account.get("evidence", []):
+            config_rules = entry.get("data", {}).get("config_rules", {})
+            noncompliant_rules = [
+                rule.get("name")
+                for rule in config_rules.get("rules_sample", [])
+                if rule.get("compliance") == "NON_COMPLIANT"
+            ]
+            noncompliant_rules_sample = ", ".join(noncompliant_rules[:10])
             summary_rows.append(
                 {
                     "account_id": account.get("account_id"),
@@ -250,6 +257,8 @@ def run_scan(config: ScanConfig) -> Dict[str, Any]:
                     "status": entry.get("status"),
                     "gap_count": len(entry.get("gaps", [])),
                     "error_count": len(entry.get("errors", [])),
+                    "noncompliant_rule_count": config_rules.get("noncompliant_count", 0),
+                    "noncompliant_rules_sample": noncompliant_rules_sample,
                 }
             )
     summary_df = pd.DataFrame(summary_rows)
@@ -268,6 +277,11 @@ def run_scan(config: ScanConfig) -> Dict[str, Any]:
         "identity_error": payload["identity_error"],
         "organization_error": organization_error,
         "account_count": len(account_results),
+        "narrative": (
+            "NON_COMPLIANT values reflect AWS Config/Security Hub rule failures, "
+            "not a direct SOC 2 determination. They are supporting evidence that "
+            "may indicate control gaps and require review."
+        ),
         "artifacts": {
             "evidence_json": os.path.basename(json_path),
             "evidence_csv": os.path.basename(csv_path),

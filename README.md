@@ -163,6 +163,9 @@ Example: `reports/20260201T144724Z/`
 - `run_completeness.json` — run metadata and artifact manifest
 - `run_completeness.json.sha256` — hash of the completeness file
 
+`evidence_summary.csv` includes a `noncompliant_rule_count` and a short
+`noncompliant_rules_sample` to explain which AWS Config rules are failing.
+
 ## Notes
 
 - Evidence collection is AWS-only; non-AWS evidence (e.g., HR policies, ticketing
