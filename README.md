@@ -101,3 +101,13 @@ Artifacts are written to the output directory:
 - Add multi-account support (Organizations + cross-account roles)
 - Expand evidence depth per service (pagination, richer metadata)
 - Export to PDF report format
+
+## Running tests
+
+Create a virtual environment, install dependencies, and run the test suite:
+
+```bash
+python3 -m venv .venv
+.venv/bin/python -m pip install -r requirements.txt
+.venv/bin/python -m unittest discover -s tests
+```
