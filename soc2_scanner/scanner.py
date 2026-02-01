@@ -305,6 +305,12 @@ def _write_pdf_summary(
             Paragraph("Report scope", styles["MetaLabel"]),
             Paragraph("SOC 2 Security (TSP 2017)", styles["MetaValue"]),
         ],
+        [
+            Paragraph("Attribution", styles["MetaLabel"]),
+            Paragraph(_report_attribution(), styles["MetaValue"]),
+            Paragraph("", styles["MetaLabel"]),
+            Paragraph("", styles["MetaValue"]),
+        ],
     ]
     meta_table = Table(meta_rows, colWidths=[80, 185, 80, 185])
     meta_table.setStyle(
@@ -422,7 +428,14 @@ def _write_pdf_summary(
                 story.append(detail)
             story.append(Spacer(1, 8))
 
-    doc.build(story)
+    def _draw_footer(canvas, doc_instance) -> None:
+        canvas.saveState()
+        canvas.setFont("Helvetica", 8)
+        canvas.setFillColor(colors.HexColor("#6B7280"))
+        canvas.drawString(36, 18, _report_attribution())
+        canvas.restoreState()
+
+    doc.build(story, onFirstPage=_draw_footer, onLaterPages=_draw_footer)
     return pdf_path
 
 
@@ -449,6 +462,13 @@ def _resolve_regions(session: boto3.Session, regions: List[str]) -> List[str]:
     if session.region_name:
         return [session.region_name]
     return ["us-east-1"]
+
+
+def _report_attribution() -> str:
+    return (
+        "Produced using the SOC2-Scanner repository "
+        "(https://github.com/jackhansen10/SOC2-Scanner)."
+    )
 
 
 def _assume_role_session(
@@ -599,6 +619,7 @@ def run_scan(config: ScanConfig) -> Dict[str, Any]:
         "caller_arn": identity["arn"],
         "identity_error": identity["identity_error"],
         "organization_error": organization_error,
+        "attribution": _report_attribution(),
         "evidence": primary_evidence,
         "accounts": account_results if len(account_results) > 1 else [],
     }
@@ -647,6 +668,7 @@ def run_scan(config: ScanConfig) -> Dict[str, Any]:
         "identity_error": payload["identity_error"],
         "organization_error": organization_error,
         "account_count": len(account_results),
+        "attribution": _report_attribution(),
         "narrative": (
             "NON_COMPLIANT values reflect AWS Config/Security Hub rule failures, "
             "not a direct SOC 2 determination. They are supporting evidence that "
@@ -680,6 +702,7 @@ def run_scan(config: ScanConfig) -> Dict[str, Any]:
         f"- Regions: {', '.join(regions)}",
         f"- Controls: {', '.join(config.controls)}",
         f"- Account count: {len(account_results)}",
+        f"- Attribution: {_report_attribution()}",
         "",
         "## Notes",
         completeness_payload["narrative"],
