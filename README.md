@@ -90,7 +90,7 @@ python -m soc2_scanner \
   --output reports
 ```
 
-Use a JSON config file (CLI args override config values):
+Use a JSON or YAML config file (CLI args override config values):
 
 ```json
 {
@@ -110,6 +110,23 @@ Use a JSON config file (CLI args override config values):
 
 ```bash
 python -m soc2_scanner --config soc2-config.json
+```
+
+```yaml
+profile: my-audit-profile
+regions: us-east-1,us-west-2
+controls: CC1,CC2,CC3,CC4,CC5,CC6,CC7,CC8
+output: reports
+all_accounts: true
+role_name: OrganizationAccountAccessRole
+external_id: my-external-id
+external_ids:
+  "111111111111": child-external-id-1
+  "222222222222": child-external-id-2
+```
+
+```bash
+python -m soc2_scanner --config soc2-config.yaml
 ```
 
 Pass per-account external IDs on the CLI (JSON string):

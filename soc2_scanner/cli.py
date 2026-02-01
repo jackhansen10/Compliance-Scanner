@@ -14,7 +14,32 @@ def _split_csv(value: str) -> List[str]:
 
 def _load_config(path: str) -> Dict[str, Any]:
     with open(path, "r", encoding="utf-8") as handle:
-        return json.load(handle)
+        if path.endswith((".yaml", ".yml")):
+            try:
+                import yaml
+            except ImportError as exc:
+                raise RuntimeError("PyYAML is required for YAML config files.") from exc
+            data = yaml.safe_load(handle) or {}
+            if not isinstance(data, dict):
+                raise ValueError("YAML config must be a mapping at the top level.")
+            return data
+        data = json.load(handle)
+        if not isinstance(data, dict):
+            raise ValueError("JSON config must be a mapping at the top level.")
+        return data
+
+
+def _validate_external_ids(external_ids: Any) -> Dict[str, str]:
+    if external_ids is None:
+        return {}
+    if not isinstance(external_ids, dict):
+        raise ValueError("external_ids must be a JSON/YAML object of account_id to external_id.")
+    normalized: Dict[str, str] = {}
+    for account_id, external_id in external_ids.items():
+        if not isinstance(account_id, str) or not isinstance(external_id, str):
+            raise ValueError("external_ids keys and values must be strings.")
+        normalized[account_id] = external_id
+    return normalized
 
 
 def _merge_cli_config(args: argparse.Namespace) -> Dict[str, Any]:
@@ -37,7 +62,7 @@ def _merge_cli_config(args: argparse.Namespace) -> Dict[str, Any]:
     _set_if(args.role_name, "role_name")
     _set_if(args.external_id, "external_id")
     if args.external_ids:
-        config["external_ids"] = json.loads(args.external_ids)
+        config["external_ids"] = _validate_external_ids(json.loads(args.external_ids))
     return config
 
 
@@ -98,7 +123,10 @@ def main() -> None:
     merged = _merge_cli_config(args)
     controls = _split_csv(merged.get("controls")) if merged.get("controls") else DEFAULT_CONTROLS
     regions = _split_csv(merged.get("regions")) if merged.get("regions") else []
-    account_ids = _split_csv(merged.get("account_ids")) if merged.get("account_ids") else []
+    if isinstance(merged.get("account_ids"), list):
+        account_ids = [str(item) for item in merged.get("account_ids")]
+    else:
+        account_ids = _split_csv(merged.get("account_ids")) if merged.get("account_ids") else []
 
     config = ScanConfig(
         controls=controls,
@@ -109,7 +137,7 @@ def main() -> None:
         all_accounts=bool(merged.get("all_accounts")),
         role_name=merged.get("role_name") or "OrganizationAccountAccessRole",
         external_id=merged.get("external_id"),
-        external_ids=merged.get("external_ids") or {},
+        external_ids=_validate_external_ids(merged.get("external_ids")),
     )
 
     result = run_scan(config)
