@@ -27,6 +27,10 @@ AWS-only evidence collectors for each CC control.
 - `soc2_scanner/scanner.py` — orchestration and report generation
 - `tests/` — basic test coverage
 
+## Architecture (high-level)
+
+![SOC2 Scanner Architecture](assets/soc2-architecture.png)
+
 ## Setup
 
 1. Create a virtual environment and install dependencies:
@@ -169,6 +173,31 @@ Example: `reports/20260201T144724Z/`
 
 `evidence_summary.csv` includes a `noncompliant_rule_count` and a short
 `noncompliant_rules_sample` to explain which AWS Config rules are failing.
+
+## Example output (trimmed)
+
+Example `report_summary.md` excerpt:
+
+```text
+#### CC6 - Logical and Physical Access
+- **Status:** Needs Review
+- **Control description:** The entity implements logical and physical access controls to protect systems and data from unauthorized access.
+- Summary: 2 gap(s), 1 error(s), 3 noncompliant rule(s).
+- Collected at: 2026-02-01T15:31:08+00:00
+
+| Type | Finding | Recommendation |
+| --- | --- | --- |
+| Gap | IAM password policy is missing. | Create an IAM account password policy that meets your security requirements. |
+| Error | Access was denied for this API call. Check IAM permissions. (Details: AccessDeniedException: ...) | — |
+| Rule | NON_COMPLIANT: securityhub-access-keys-rotated-dcc5e306 | Rotate or deactivate IAM access keys that exceed your rotation policy. Remove unused keys and enforce MFA/SSO for users. |
+```
+
+Explanation:
+
+- **Status** is a high-level control outcome based on gaps and errors.
+- **Control description** is the SOC 2 Security criteria language for context.
+- **Summary** counts gaps, errors, and noncompliant rule evidence.
+- **Finding/Recommendation** rows are actionable items derived from AWS evidence.
 
 ## Notes
 
