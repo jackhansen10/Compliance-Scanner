@@ -176,12 +176,6 @@ Example: `reports/20260201T144724Z/`
   systems) should be gathered separately.
 - The scanner will still generate reports even if AWS identity resolution fails.
 
-## Roadmap ideas
-
-- Add multi-account support (Organizations + cross-account roles)
-- Expand evidence depth per service (pagination, richer metadata)
-- Export to PDF report format
-
 ## Running tests
 
 Create a virtual environment, install dependencies, and run the test suite:
