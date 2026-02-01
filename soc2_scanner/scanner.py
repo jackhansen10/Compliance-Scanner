@@ -466,8 +466,8 @@ def _resolve_regions(session: boto3.Session, regions: List[str]) -> List[str]:
 
 def _report_attribution() -> str:
     return (
-        "Produced using the SOC2-Scanner repository "
-        "(https://github.com/jackhansen10/SOC2-Scanner)."
+        "Produced using the Compliance-Scanner repository "
+        "(https://github.com/jackhansen10/Compliance-Scanner)."
     )
 
 

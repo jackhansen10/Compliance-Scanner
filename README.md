@@ -1,4 +1,4 @@
-# SOC2 Scanner
+# Compliance Scanner
 
 Automated evidence collection for SOC 2 Type II controls. This tool is designed
 to pull evidence from AWS services, map it to specific SOC 2 controls, and
@@ -29,7 +29,7 @@ AWS-only evidence collectors for each CC control.
 
 ## Architecture (high-level)
 
-![SOC2 Scanner Architecture](assets/soc2-architecture.png)
+![Compliance Scanner Architecture](assets/soc2-architecture.png)
 
 ## Setup
 
