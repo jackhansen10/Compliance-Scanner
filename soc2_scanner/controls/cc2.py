@@ -12,6 +12,10 @@ from soc2_scanner.controls.context import EvidenceContext, get_cached
 
 CONTROL_ID = "CC2"
 TITLE = "Communication and Information"
+CONTROL_LANGUAGE = (
+    "The entity obtains or generates and communicates relevant information "
+    "to support internal control."
+)
 SOURCES = ["CloudWatch", "VPC", "CloudTrail"]
 
 

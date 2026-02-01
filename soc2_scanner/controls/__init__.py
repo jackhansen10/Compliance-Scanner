@@ -10,41 +10,49 @@ from soc2_scanner.controls.context import EvidenceContext, status_from_findings
 CONTROL_REGISTRY: Dict[str, Dict[str, Any]] = {
     cc1.CONTROL_ID: {
         "title": cc1.TITLE,
+        "language": cc1.CONTROL_LANGUAGE,
         "sources": cc1.SOURCES,
         "evaluator": cc1.evaluate,
     },
     cc2.CONTROL_ID: {
         "title": cc2.TITLE,
+        "language": cc2.CONTROL_LANGUAGE,
         "sources": cc2.SOURCES,
         "evaluator": cc2.evaluate,
     },
     cc3.CONTROL_ID: {
         "title": cc3.TITLE,
+        "language": cc3.CONTROL_LANGUAGE,
         "sources": cc3.SOURCES,
         "evaluator": cc3.evaluate,
     },
     cc4.CONTROL_ID: {
         "title": cc4.TITLE,
+        "language": cc4.CONTROL_LANGUAGE,
         "sources": cc4.SOURCES,
         "evaluator": cc4.evaluate,
     },
     cc5.CONTROL_ID: {
         "title": cc5.TITLE,
+        "language": cc5.CONTROL_LANGUAGE,
         "sources": cc5.SOURCES,
         "evaluator": cc5.evaluate,
     },
     cc6.CONTROL_ID: {
         "title": cc6.TITLE,
+        "language": cc6.CONTROL_LANGUAGE,
         "sources": cc6.SOURCES,
         "evaluator": cc6.evaluate,
     },
     cc7.CONTROL_ID: {
         "title": cc7.TITLE,
+        "language": cc7.CONTROL_LANGUAGE,
         "sources": cc7.SOURCES,
         "evaluator": cc7.evaluate,
     },
     cc8.CONTROL_ID: {
         "title": cc8.TITLE,
+        "language": cc8.CONTROL_LANGUAGE,
         "sources": cc8.SOURCES,
         "evaluator": cc8.evaluate,
     },
@@ -70,6 +78,7 @@ def evaluate_control(control: str, context: EvidenceContext) -> Dict[str, Any]:
     return {
         "control_id": control,
         "title": definition["title"],
+        "control_language": definition["language"],
         "status": status,
         "evidence_sources": definition["sources"],
         "collected_at": datetime.now(timezone.utc).isoformat(),

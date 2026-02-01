@@ -12,6 +12,10 @@ from soc2_scanner.controls.context import EvidenceContext, get_cached
 
 CONTROL_ID = "CC3"
 TITLE = "Risk Assessment"
+CONTROL_LANGUAGE = (
+    "The entity specifies objectives and identifies and assesses risks "
+    "to achieving those objectives."
+)
 SOURCES = ["Security Hub", "GuardDuty", "Inspector"]
 
 

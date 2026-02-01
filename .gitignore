@@ -22,6 +22,7 @@ coverage.xml
 
 reports/
 output/
+terraform/
 terraform/.terraform/
 terraform/.terraform.lock.hcl
 terraform/terraform.tfstate

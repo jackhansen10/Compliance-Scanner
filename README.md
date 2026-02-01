@@ -162,6 +162,10 @@ Example: `reports/20260201T144724Z/`
 - `evidence.json.sha256` — hash of the JSON report for integrity
 - `run_completeness.json` — run metadata and artifact manifest
 - `run_completeness.json.sha256` — hash of the completeness file
+- `report_summary.md` — human-readable control-by-control summary
+- `report_summary.md.sha256` — hash of the summary document
+- `report_summary.pdf` — formatted PDF summary
+- `report_summary.pdf.sha256` — hash of the PDF document
 
 `evidence_summary.csv` includes a `noncompliant_rule_count` and a short
 `noncompliant_rules_sample` to explain which AWS Config rules are failing.

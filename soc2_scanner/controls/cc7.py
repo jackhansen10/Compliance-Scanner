@@ -8,6 +8,10 @@ from soc2_scanner.controls.context import EvidenceContext, get_cached
 
 CONTROL_ID = "CC7"
 TITLE = "System Operations"
+CONTROL_LANGUAGE = (
+    "The entity performs system operations and monitoring, and responds "
+    "to detected incidents."
+)
 SOURCES = ["AWS Config", "SSM", "CloudTrail"]
 
 

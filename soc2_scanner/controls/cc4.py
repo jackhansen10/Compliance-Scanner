@@ -8,6 +8,10 @@ from soc2_scanner.controls.context import EvidenceContext, get_cached
 
 CONTROL_ID = "CC4"
 TITLE = "Monitoring Activities"
+CONTROL_LANGUAGE = (
+    "The entity selects, develops, and performs ongoing and separate evaluations "
+    "to ascertain internal control effectiveness."
+)
 SOURCES = ["AWS Config", "CloudWatch"]
 
 

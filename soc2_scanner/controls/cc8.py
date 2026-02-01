@@ -12,6 +12,10 @@ from soc2_scanner.controls.context import EvidenceContext, get_cached
 
 CONTROL_ID = "CC8"
 TITLE = "Change Management"
+CONTROL_LANGUAGE = (
+    "The entity implements change management to ensure system changes are "
+    "authorized, tested, and approved."
+)
 SOURCES = ["CodePipeline", "CodeBuild", "CloudTrail"]
 
 

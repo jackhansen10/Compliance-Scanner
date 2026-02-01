@@ -8,6 +8,10 @@ from soc2_scanner.controls.context import EvidenceContext, get_cached
 
 CONTROL_ID = "CC1"
 TITLE = "Control Environment"
+CONTROL_LANGUAGE = (
+    "The entity demonstrates a commitment to integrity, ethical values, "
+    "and appropriate governance oversight."
+)
 SOURCES = ["Organizations", "CloudTrail"]
 
 

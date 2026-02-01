@@ -12,6 +12,10 @@ from soc2_scanner.controls.context import EvidenceContext, get_cached
 
 CONTROL_ID = "CC6"
 TITLE = "Logical and Physical Access"
+CONTROL_LANGUAGE = (
+    "The entity implements logical and physical access controls to protect "
+    "systems and data from unauthorized access."
+)
 SOURCES = ["IAM", "Access Analyzer", "CloudTrail"]
 
 

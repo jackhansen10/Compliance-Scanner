@@ -56,6 +56,376 @@ def _write_hash_file(target_path: str) -> str:
     return hash_path
 
 
+def _gap_recommendation_map() -> Dict[str, str]:
+    return {
+        "AWS Organizations is not enabled.": (
+            "Enable AWS Organizations or mark org-based controls as not applicable "
+            "for single-account deployments."
+        ),
+        "No Service Control Policies detected.": (
+            "Create and attach Service Control Policies (SCPs) to enforce org-wide guardrails."
+        ),
+        "No active VPC flow logs detected.": (
+            "Enable VPC Flow Logs and verify the flow log status is ACTIVE."
+        ),
+        "Inspector coverage not detected in the provided regions.": (
+            "Enable Inspector2 coverage for EC2/ECR/Lambda and allow time for coverage to populate."
+        ),
+        "No SSM managed instances detected.": (
+            "Install/activate SSM Agent on instances and ensure they are managed by SSM."
+        ),
+        "IAM password policy is missing.": (
+            "Create an IAM account password policy that meets your security requirements."
+        ),
+        "No CloudTrail trails are actively logging.": (
+            "Ensure CloudTrail is enabled and logging to an S3 bucket/CloudWatch Logs."
+        ),
+        "AWS Config is not recording in any provided region.": (
+            "Enable AWS Config recorder and delivery channel in the target regions."
+        ),
+        "No AWS Backup plans detected.": (
+            "Create AWS Backup plans to meet backup and retention requirements."
+        ),
+        "No CodePipeline or CodeBuild projects detected.": (
+            "Create CI/CD pipelines or document alternative change management controls."
+        ),
+        "No CloudWatch alarms detected.": (
+            "Create CloudWatch alarms for critical logs/metrics and ensure notifications are configured."
+        ),
+        "No CloudWatch log groups detected.": (
+            "Ensure logging is enabled and logs are being delivered to CloudWatch log groups."
+        ),
+        "No active IAM Access Analyzer found.": (
+            "Enable IAM Access Analyzer in each region to detect unintended access."
+        ),
+        "GuardDuty is not enabled in the provided regions.": (
+            "Enable GuardDuty in each required region."
+        ),
+        "Security Hub is not enabled in the provided regions.": (
+            "Enable Security Hub and required standards in each region."
+        ),
+    }
+
+def _recommendation_for_gap(gap: str) -> str:
+    return _gap_recommendation_map().get(gap, f"Review and remediate gap: {gap}")
+
+
+def _recommendation_for_error(error: str) -> str:
+    if "AWSOrganizationsNotInUseException" in error:
+        return (
+            "Enable AWS Organizations or run the scanner from an Organizations management account."
+        )
+    if "GetAccountPasswordPolicy" in error:
+        return "Create an IAM account password policy to satisfy password requirements."
+    return f"Resolve error and re-run scan: {error}"
+
+
+def _recommendation_for_rule(rule_name: str, remediation_rule_map: Dict[str, str]) -> str:
+    return remediation_rule_map.get(
+        rule_name,
+        f"Review AWS Config/Security Hub guidance for {rule_name} and remediate affected resources.",
+    )
+
+
+def _friendly_error_message(error: str) -> str:
+    if "AWSOrganizationsNotInUseException" in error:
+        return "AWS Organizations is not enabled for this account."
+    if "GetAccountPasswordPolicy" in error:
+        return "No IAM account password policy is configured."
+    if "AccessDenied" in error or "AccessDeniedException" in error:
+        return "Access was denied for this API call. Check IAM permissions."
+    if "ValidationException" in error:
+        return "The request was rejected as invalid by the AWS service."
+    return "An AWS API error occurred while collecting evidence."
+
+
+def _build_issue_rows(
+    entry: Dict[str, Any],
+    remediation_rule_map: Dict[str, str],
+) -> List[Dict[str, str]]:
+    rows: List[Dict[str, str]] = []
+
+    gaps = entry.get("gaps", [])
+    errors = entry.get("errors", [])
+    config_rules = entry.get("data", {}).get("config_rules", {})
+    noncompliant_sample = [
+        rule.get("name")
+        for rule in config_rules.get("rules_sample", [])
+        if rule.get("compliance") == "NON_COMPLIANT"
+    ]
+
+    for gap in gaps:
+        rows.append(
+            {
+                "type": "Gap",
+                "item": gap,
+                "recommendation": _recommendation_for_gap(gap),
+            }
+        )
+
+    for err in errors:
+        rows.append(
+            {
+                "type": "Error",
+                "item": f"{_friendly_error_message(err)} (Details: {err})",
+                "recommendation": "—",
+            }
+        )
+
+    for name in noncompliant_sample[:10]:
+        rows.append(
+            {
+                "type": "Rule",
+                "item": f"NON_COMPLIANT: {name}",
+                "recommendation": _recommendation_for_rule(name, remediation_rule_map),
+            }
+        )
+
+    return rows
+
+
+def _control_summary(entry: Dict[str, Any]) -> str:
+    gaps = entry.get("gaps", [])
+    errors = entry.get("errors", [])
+    config_rules = entry.get("data", {}).get("config_rules", {})
+    noncompliant_count = config_rules.get("noncompliant_count", 0)
+    return (
+        f"{len(gaps)} gap(s), {len(errors)} error(s), "
+        f"{noncompliant_count} noncompliant rule(s)."
+    )
+
+
+def _format_status_value(status: str) -> str:
+    if not status:
+        return "Unknown"
+    return status.replace("_", " ").title()
+
+
+def _write_pdf_summary(
+    run_dir: str,
+    payload: Dict[str, Any],
+    account_results: List[Dict[str, Any]],
+    completeness_payload: Dict[str, Any],
+) -> Optional[str]:
+    try:
+        from reportlab.lib import colors
+        from reportlab.lib.pagesizes import LETTER
+        from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
+        from reportlab.platypus import (
+            PageBreak,
+            Paragraph,
+            SimpleDocTemplate,
+            Spacer,
+            Table,
+            TableStyle,
+        )
+    except ImportError:
+        return None
+
+    pdf_path = os.path.join(run_dir, "report_summary.pdf")
+    doc = SimpleDocTemplate(
+        pdf_path,
+        pagesize=LETTER,
+        rightMargin=36,
+        leftMargin=36,
+        topMargin=36,
+        bottomMargin=36,
+        title="SOC 2 Evidence Summary",
+    )
+    styles = getSampleStyleSheet()
+    styles.add(ParagraphStyle(name="Small", parent=styles["BodyText"], fontSize=9))
+    styles.add(
+        ParagraphStyle(
+            name="SmallWrap",
+            parent=styles["Small"],
+            wordWrap="CJK",
+            leading=11,
+        )
+    )
+    styles.add(
+        ParagraphStyle(
+            name="Subtitle",
+            parent=styles["Title"],
+            fontSize=14,
+            leading=18,
+            textColor=colors.HexColor("#374151"),
+            spaceBefore=4,
+        )
+    )
+    styles.add(
+        ParagraphStyle(
+            name="MetaLabel",
+            parent=styles["BodyText"],
+            fontSize=9,
+            textColor=colors.HexColor("#6B7280"),
+        )
+    )
+    styles.add(
+        ParagraphStyle(
+            name="MetaValue",
+            parent=styles["BodyText"],
+            fontSize=9,
+            textColor=colors.HexColor("#111827"),
+        )
+    )
+    story = []
+    remediation_rule_map = {
+        "securityhub-access-keys-rotated-dcc5e306": (
+            "Rotate or deactivate IAM access keys that exceed your rotation policy. "
+            "Remove unused keys and enforce MFA/SSO for users."
+        )
+    }
+
+    story.append(Paragraph("SOC 2 Evidence Summary", styles["Title"]))
+    story.append(Paragraph("AWS Evidence Collection Report", styles["Subtitle"]))
+    story.append(Spacer(1, 14))
+
+    meta_rows = [
+        [
+            Paragraph("Run ID", styles["MetaLabel"]),
+            Paragraph(payload["run_id"], styles["MetaValue"]),
+            Paragraph("Generated (UTC)", styles["MetaLabel"]),
+            Paragraph(payload["generated_at"], styles["MetaValue"]),
+        ],
+        [
+            Paragraph("Account ID", styles["MetaLabel"]),
+            Paragraph(payload["account_id"], styles["MetaValue"]),
+            Paragraph("Caller ARN", styles["MetaLabel"]),
+            Paragraph(payload["caller_arn"], styles["MetaValue"]),
+        ],
+        [
+            Paragraph("Regions", styles["MetaLabel"]),
+            Paragraph(", ".join(payload["regions"]), styles["MetaValue"]),
+            Paragraph("Controls", styles["MetaLabel"]),
+            Paragraph(", ".join(payload["controls"]), styles["MetaValue"]),
+        ],
+        [
+            Paragraph("Account count", styles["MetaLabel"]),
+            Paragraph(str(len(account_results)), styles["MetaValue"]),
+            Paragraph("Report scope", styles["MetaLabel"]),
+            Paragraph("SOC 2 Security (TSP 2017)", styles["MetaValue"]),
+        ],
+    ]
+    meta_table = Table(meta_rows, colWidths=[80, 185, 80, 185])
+    meta_table.setStyle(
+        TableStyle(
+            [
+                ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#F9FAFB")),
+                ("BOX", (0, 0), (-1, -1), 0.5, colors.HexColor("#D1D5DB")),
+                ("INNERGRID", (0, 0), (-1, -1), 0.25, colors.HexColor("#E5E7EB")),
+                ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                ("LEFTPADDING", (0, 0), (-1, -1), 8),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 8),
+                ("TOPPADDING", (0, 0), (-1, -1), 6),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
+            ]
+        )
+    )
+    story.append(meta_table)
+    story.append(Spacer(1, 14))
+
+    story.append(Paragraph("Notes", styles["Heading2"]))
+    story.append(Paragraph(completeness_payload["narrative"], styles["BodyText"]))
+    story.append(Spacer(1, 12))
+
+    for account in account_results:
+        story.append(PageBreak())
+        story.append(Paragraph(f"Account {account.get('account_id')}", styles["Heading2"]))
+        if account.get("account_name"):
+            story.append(Paragraph(f"Name: {account.get('account_name')}", styles["Normal"]))
+        if account.get("identity_error"):
+            story.append(Paragraph(f"Identity error: {account.get('identity_error')}", styles["Normal"]))
+        story.append(Spacer(1, 12))
+
+        table_data = [
+            [
+                "Control",
+                "Title",
+                "Status",
+                "Gaps",
+                "Errors",
+                "Noncompliant Rules",
+            ]
+        ]
+        for entry in account.get("evidence", []):
+            config_rules = entry.get("data", {}).get("config_rules", {})
+            noncompliant_count = config_rules.get("noncompliant_count", 0)
+            table_data.append(
+                [
+                    entry.get("control_id"),
+                    entry.get("title"),
+                    entry.get("status"),
+                    str(len(entry.get("gaps", []))),
+                    str(len(entry.get("errors", []))),
+                    str(noncompliant_count),
+                ]
+            )
+
+        table = Table(table_data, repeatRows=1)
+        table.setStyle(
+            TableStyle(
+                [
+                    ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#1F2937")),
+                    ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+                    ("GRID", (0, 0), (-1, -1), 0.25, colors.grey),
+                    ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+                    ("FONTSIZE", (0, 0), (-1, -1), 9),
+                    ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.whitesmoke, colors.lightgrey]),
+                    ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                ]
+            )
+        )
+        story.append(table)
+        story.append(Spacer(1, 12))
+
+        for entry in account.get("evidence", []):
+            story.append(Paragraph(f"{entry.get('control_id')} Details", styles["Heading3"]))
+            if entry.get("control_language"):
+                story.append(
+                    Paragraph(
+                        f"<b>Control description:</b> {entry.get('control_language')}",
+                        styles["Small"],
+                    )
+                )
+            status_text = _format_status_value(entry.get("status", "unknown"))
+            story.append(Paragraph(f"<b>Status:</b> {status_text}", styles["Small"]))
+            story.append(Paragraph(_control_summary(entry), styles["Small"]))
+            story.append(Paragraph(f"Collected at: {entry.get('collected_at')}", styles["Small"]))
+            issue_rows = _build_issue_rows(entry, remediation_rule_map)
+            if issue_rows:
+                detail_table = [
+                    ["Type", "Finding", "Recommendation"],
+                ]
+                for row in issue_rows:
+                    detail_table.append(
+                        [
+                            Paragraph(row["type"], styles["Small"]),
+                            Paragraph(row["item"], styles["SmallWrap"]),
+                            Paragraph(row["recommendation"], styles["SmallWrap"]),
+                        ]
+                    )
+                detail = Table(detail_table, repeatRows=1, colWidths=[60, 300, 160])
+                detail.setStyle(
+                    TableStyle(
+                        [
+                            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#111827")),
+                            ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+                            ("GRID", (0, 0), (-1, -1), 0.25, colors.grey),
+                            ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+                            ("FONTSIZE", (0, 0), (-1, -1), 9),
+                            ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                            ("WORDWRAP", (0, 0), (-1, -1), "CJK"),
+                        ]
+                    )
+                )
+                story.append(Spacer(1, 6))
+                story.append(detail)
+            story.append(Spacer(1, 8))
+
+    doc.build(story)
+    return pdf_path
+
+
 def _get_account_identity(session: boto3.Session) -> Dict[str, Optional[str]]:
     try:
         sts = session.client("sts")
@@ -292,7 +662,92 @@ def run_scan(config: ScanConfig) -> Dict[str, Any]:
         json.dump(completeness_payload, handle, indent=2, sort_keys=True)
     completeness_hash = _write_hash_file(completeness_path)
 
+    summary_path = os.path.join(run_dir, "report_summary.md")
+    remediation_rule_map = {
+        "securityhub-access-keys-rotated-dcc5e306": (
+            "Rotate or deactivate IAM access keys that exceed your rotation policy. "
+            "Remove unused keys and enforce MFA/SSO for users."
+        )
+    }
+
+    summary_lines = [
+        "# SOC 2 Evidence Summary",
+        "",
+        f"- Run ID: {run_id}",
+        f"- Generated at (UTC): {payload['generated_at']}",
+        f"- Account ID: {payload['account_id']}",
+        f"- Caller ARN: {payload['caller_arn']}",
+        f"- Regions: {', '.join(regions)}",
+        f"- Controls: {', '.join(config.controls)}",
+        f"- Account count: {len(account_results)}",
+        "",
+        "## Notes",
+        completeness_payload["narrative"],
+        "",
+        "## Control Results",
+    ]
+
+    for account in account_results:
+        summary_lines.extend(
+            [
+                "",
+                f"### Account {account.get('account_id')}",
+            ]
+        )
+        if account.get("account_name"):
+            summary_lines.append(f"- Name: {account.get('account_name')}")
+        if account.get("identity_error"):
+            summary_lines.append(f"- Identity error: {account.get('identity_error')}")
+        summary_lines.append("")
+
+        for entry in account.get("evidence", []):
+            summary_lines.extend(
+                [
+                    f"#### {entry.get('control_id')} - {entry.get('title')}",
+                    f"- **Status:** {_format_status_value(entry.get('status', 'unknown'))}",
+                    f"- **Control description:** {entry.get('control_language')}",
+                    f"- Summary: {_control_summary(entry)}",
+                    f"- Collected at: {entry.get('collected_at')}",
+                ]
+            )
+
+            issue_rows = _build_issue_rows(entry, remediation_rule_map)
+            if issue_rows:
+                summary_lines.append("")
+                summary_lines.append("| Type | Finding | Recommendation |")
+                summary_lines.append("| --- | --- | --- |")
+                for row in issue_rows:
+                    summary_lines.append(
+                        f"| {row['type']} | {row['item']} | {row['recommendation']} |"
+                    )
+            summary_lines.append("")
+
+    summary_lines.extend(
+        [
+            "## Artifacts",
+            f"- evidence.json",
+            f"- evidence_summary.csv",
+            f"- evidence.json.sha256",
+            f"- run_completeness.json",
+            f"- run_completeness.json.sha256",
+        ]
+    )
+    with open(summary_path, "w", encoding="utf-8") as handle:
+        handle.write("\n".join(summary_lines).strip() + "\n")
+    summary_hash = _write_hash_file(summary_path)
+    pdf_path = _write_pdf_summary(run_dir, payload, account_results, completeness_payload)
+    pdf_hash = _write_hash_file(pdf_path) if pdf_path else None
+
     return {
-        "artifacts": [json_path, csv_path, hash_path, completeness_path, completeness_hash],
+        "artifacts": [
+            json_path,
+            csv_path,
+            hash_path,
+            completeness_path,
+            completeness_hash,
+            summary_path,
+            summary_hash,
+            *(path for path in [pdf_path, pdf_hash] if path),
+        ],
         "identity_error": identity["identity_error"],
     }

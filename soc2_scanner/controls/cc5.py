@@ -12,6 +12,10 @@ from soc2_scanner.controls.context import EvidenceContext, get_cached
 
 CONTROL_ID = "CC5"
 TITLE = "Control Activities"
+CONTROL_LANGUAGE = (
+    "The entity selects and develops control activities that mitigate risks "
+    "to achieving objectives."
+)
 SOURCES = ["AWS Backup", "Organizations", "AWS Config"]
 
 
