@@ -32,6 +32,20 @@ def build_parser() -> argparse.ArgumentParser:
         default="reports",
         help="Output directory for reports (default: reports)",
     )
+    parser.add_argument(
+        "--all-accounts",
+        action="store_true",
+        help="Scan all AWS Organization accounts using AssumeRole",
+    )
+    parser.add_argument(
+        "--account-ids",
+        help="Comma-separated AWS account IDs to scan",
+    )
+    parser.add_argument(
+        "--role-name",
+        default="OrganizationAccountAccessRole",
+        help="Role name to assume in child accounts",
+    )
     return parser
 
 
@@ -41,12 +55,16 @@ def main() -> None:
 
     controls = _split_csv(args.controls) if args.controls else DEFAULT_CONTROLS
     regions = _split_csv(args.regions) if args.regions else []
+    account_ids = _split_csv(args.account_ids) if args.account_ids else []
 
     config = ScanConfig(
         controls=controls,
         regions=regions,
         profile=args.profile,
         output_dir=args.output,
+        account_ids=account_ids,
+        all_accounts=args.all_accounts,
+        role_name=args.role_name,
     )
 
     result = run_scan(config)

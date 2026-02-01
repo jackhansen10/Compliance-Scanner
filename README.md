@@ -68,6 +68,26 @@ python -m soc2_scanner \
   --output reports
 ```
 
+Scan across AWS Organizations accounts (assume role into each child account):
+
+```bash
+python -m soc2_scanner \
+  --all-accounts \
+  --role-name OrganizationAccountAccessRole \
+  --regions us-east-1 \
+  --output reports
+```
+
+Scan a specific set of account IDs:
+
+```bash
+python -m soc2_scanner \
+  --account-ids 111111111111,222222222222 \
+  --role-name OrganizationAccountAccessRole \
+  --regions us-east-1 \
+  --output reports
+```
+
 ## Control coverage (AWS-only)
 
 The scanner maps evidence to TSP 2017 Security criteria (CC1–CC8). Each control

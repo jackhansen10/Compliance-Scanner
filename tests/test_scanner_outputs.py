@@ -25,19 +25,29 @@ class ScannerOutputTests(unittest.TestCase):
                     "soc2_scanner.scanner._get_account_identity",
                     return_value={"account_id": "123", "arn": "arn", "identity_error": None},
                 ):
-                    with patch("soc2_scanner.scanner.evaluate_control") as mock_eval:
-                        mock_eval.return_value = {
-                            "control_id": "CC1",
-                            "title": "Control Environment",
-                            "status": "pass",
-                            "evidence_sources": [],
-                            "collected_at": "now",
-                            "gaps": [],
+                    with patch(
+                        "soc2_scanner.scanner.collect_organizations",
+                        return_value={
+                            "organization_present": True,
+                            "root_count": 1,
+                            "scp_count": 1,
+                            "account_count": 1,
                             "errors": [],
-                            "data": {},
-                        }
+                        },
+                    ):
+                        with patch("soc2_scanner.scanner.evaluate_control") as mock_eval:
+                            mock_eval.return_value = {
+                                "control_id": "CC1",
+                                "title": "Control Environment",
+                                "status": "pass",
+                                "evidence_sources": [],
+                                "collected_at": "now",
+                                "gaps": [],
+                                "errors": [],
+                                "data": {},
+                            }
 
-                        result = run_scan(config)
+                            result = run_scan(config)
 
             json_path = os.path.join(tmp_dir, "evidence.json")
             csv_path = os.path.join(tmp_dir, "evidence_summary.csv")
