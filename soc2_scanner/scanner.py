@@ -24,6 +24,7 @@ class ScanConfig:
     account_ids: List[str] = field(default_factory=list)
     all_accounts: bool = False
     role_name: str = "OrganizationAccountAccessRole"
+    external_id: Optional[str] = None
 
 
 def _utc_timestamp() -> str:
@@ -76,14 +77,20 @@ def _resolve_regions(session: boto3.Session, regions: List[str]) -> List[str]:
 
 
 def _assume_role_session(
-    base_session: boto3.Session, account_id: str, role_name: str
+    base_session: boto3.Session,
+    account_id: str,
+    role_name: str,
+    external_id: Optional[str],
 ) -> Tuple[Optional[boto3.Session], Optional[str]]:
     try:
         sts = base_session.client("sts")
-        response = sts.assume_role(
-            RoleArn=f"arn:aws:iam::{account_id}:role/{role_name}",
-            RoleSessionName="soc2-scanner",
-        )
+        assume_kwargs: Dict[str, Any] = {
+            "RoleArn": f"arn:aws:iam::{account_id}:role/{role_name}",
+            "RoleSessionName": "soc2-scanner",
+        }
+        if external_id:
+            assume_kwargs["ExternalId"] = external_id
+        response = sts.assume_role(**assume_kwargs)
         credentials = response["Credentials"]
         return (
             boto3.Session(
@@ -169,7 +176,7 @@ def run_scan(config: ScanConfig) -> Dict[str, Any]:
             assume_error = None
         else:
             account_session, assume_error = _assume_role_session(
-                session, account_id, config.role_name
+                session, account_id, config.role_name, config.external_id
             )
             if account_session:
                 account_identity = _get_account_identity(account_session)

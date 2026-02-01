@@ -74,6 +74,7 @@ Scan across AWS Organizations accounts (assume role into each child account):
 python -m soc2_scanner \
   --all-accounts \
   --role-name OrganizationAccountAccessRole \
+  --external-id "my-external-id" \
   --regions us-east-1 \
   --output reports
 ```
@@ -84,8 +85,27 @@ Scan a specific set of account IDs:
 python -m soc2_scanner \
   --account-ids 111111111111,222222222222 \
   --role-name OrganizationAccountAccessRole \
+  --external-id "my-external-id" \
   --regions us-east-1 \
   --output reports
+```
+
+Use a JSON config file (CLI args override config values):
+
+```json
+{
+  "profile": "my-audit-profile",
+  "regions": "us-east-1,us-west-2",
+  "controls": "CC1,CC2,CC3,CC4,CC5,CC6,CC7,CC8",
+  "output": "reports",
+  "all_accounts": true,
+  "role_name": "OrganizationAccountAccessRole",
+  "external_id": "my-external-id"
+}
+```
+
+```bash
+python -m soc2_scanner --config soc2-config.json
 ```
 
 ## Control coverage (AWS-only)

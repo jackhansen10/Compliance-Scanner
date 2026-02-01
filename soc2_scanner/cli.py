@@ -1,5 +1,6 @@
 import argparse
-from typing import List
+import json
+from typing import Any, Dict, List
 
 from soc2_scanner.scanner import ScanConfig, run_scan
 
@@ -11,9 +12,40 @@ def _split_csv(value: str) -> List[str]:
     return [item.strip() for item in value.split(",") if item.strip()]
 
 
+def _load_config(path: str) -> Dict[str, Any]:
+    with open(path, "r", encoding="utf-8") as handle:
+        return json.load(handle)
+
+
+def _merge_cli_config(args: argparse.Namespace) -> Dict[str, Any]:
+    config: Dict[str, Any] = {}
+    if args.config:
+        config.update(_load_config(args.config))
+
+    def _set_if(value: Any, key: str) -> None:
+        if value is not None:
+            config[key] = value
+
+    _set_if(args.profile, "profile")
+    _set_if(args.regions, "regions")
+    _set_if(args.controls, "controls")
+    _set_if(args.output, "output")
+    if args.account_ids:
+        config["account_ids"] = args.account_ids
+    if args.all_accounts:
+        config["all_accounts"] = True
+    _set_if(args.role_name, "role_name")
+    _set_if(args.external_id, "external_id")
+    return config
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="SOC2 evidence collection and reporting",
+    )
+    parser.add_argument(
+        "--config",
+        help="Path to JSON config file (CLI args override)",
     )
     parser.add_argument(
         "--profile",
@@ -46,6 +78,10 @@ def build_parser() -> argparse.ArgumentParser:
         default="OrganizationAccountAccessRole",
         help="Role name to assume in child accounts",
     )
+    parser.add_argument(
+        "--external-id",
+        help="External ID to use when assuming roles",
+    )
     return parser
 
 
@@ -53,18 +89,20 @@ def main() -> None:
     parser = build_parser()
     args = parser.parse_args()
 
-    controls = _split_csv(args.controls) if args.controls else DEFAULT_CONTROLS
-    regions = _split_csv(args.regions) if args.regions else []
-    account_ids = _split_csv(args.account_ids) if args.account_ids else []
+    merged = _merge_cli_config(args)
+    controls = _split_csv(merged.get("controls")) if merged.get("controls") else DEFAULT_CONTROLS
+    regions = _split_csv(merged.get("regions")) if merged.get("regions") else []
+    account_ids = _split_csv(merged.get("account_ids")) if merged.get("account_ids") else []
 
     config = ScanConfig(
         controls=controls,
         regions=regions,
-        profile=args.profile,
-        output_dir=args.output,
+        profile=merged.get("profile"),
+        output_dir=merged.get("output") or "reports",
         account_ids=account_ids,
-        all_accounts=args.all_accounts,
-        role_name=args.role_name,
+        all_accounts=bool(merged.get("all_accounts")),
+        role_name=merged.get("role_name") or "OrganizationAccountAccessRole",
+        external_id=merged.get("external_id"),
     )
 
     result = run_scan(config)
