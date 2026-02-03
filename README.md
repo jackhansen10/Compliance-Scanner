@@ -2,13 +2,13 @@
 
 Automated evidence collection for SOC 2 Type II controls. This tool is designed
 to pull evidence from AWS services, map it to specific SOC 2 controls, and
-generate audit-ready reports with timestamps and hashes for integrity.
+generate reports with timestamps and hashes for integrity.
 
 ## What it does
 
 - Pulls evidence from AWS services (IAM, CloudTrail, Config, GuardDuty, more)
 - Maps evidence to SOC 2 controls (CC1 through CC8)
-- Generates audit-ready reports (JSON + CSV)
+- Generates reports (JSON + CSV)
 - Adds timestamps and SHA-256 hashes for integrity checks
 
 ## How it works (high-level)
