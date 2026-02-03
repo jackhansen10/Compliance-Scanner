@@ -205,6 +205,13 @@ Explanation:
   systems) should be gathered separately.
 - The scanner will still generate reports even if AWS identity resolution fails.
 
+## Contribution guidelines
+
+- Open an issue or discussion before large changes.
+- Keep changes focused and include tests when behavior changes.
+- Run the test suite and ensure it passes before submitting.
+- Follow the existing style and keep docs/CLI help in sync with code.
+
 ## Running tests
 
 Create a virtual environment, install dependencies, and run the test suite:
