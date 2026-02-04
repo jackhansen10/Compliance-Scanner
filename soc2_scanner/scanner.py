@@ -11,7 +11,8 @@ import boto3
 import pandas as pd
 from botocore.exceptions import BotoCoreError, ClientError
 
-from soc2_scanner.controls import EvidenceContext, evaluate_control
+from soc2_scanner.controls import CONTROL_REGISTRY, EvidenceContext, evaluate_control
+from soc2_scanner.controls.context import status_from_findings
 from soc2_scanner.collectors import collect_organizations
 
 
@@ -26,6 +27,7 @@ class ScanConfig:
     role_name: str = "OrganizationAccountAccessRole"
     external_id: Optional[str] = None
     external_ids: Dict[str, str] = field(default_factory=dict)
+    simulate: bool = False
 
 
 def _utc_timestamp() -> str:
@@ -199,6 +201,269 @@ def _format_status_value(status: str) -> str:
     if not status:
         return "Unknown"
     return status.replace("_", " ").title()
+
+
+def _simulate_account_ids(config: ScanConfig) -> Tuple[List[str], Dict[str, str]]:
+    if config.account_ids:
+        account_ids = [str(item) for item in config.account_ids]
+    elif config.all_accounts:
+        account_ids = ["111111111111", "222222222222", "333333333333"]
+    else:
+        account_ids = ["123456789012"]
+    account_map = {
+        account_id: f"Simulated Account {index + 1}"
+        for index, account_id in enumerate(account_ids)
+    }
+    return account_ids, account_map
+
+
+def _simulate_config_rules(seed: int) -> Dict[str, Any]:
+    rule_names = [
+        "securityhub-access-keys-rotated-dcc5e306",
+        "cloudtrail-enabled-1a2b3c",
+        "vpc-flow-logs-enabled-4d5e6f",
+    ]
+    noncompliant_count = seed % (len(rule_names) + 1)
+    rules_sample = [
+        {"name": rule_names[index], "compliance": "NON_COMPLIANT"}
+        for index in range(noncompliant_count)
+    ]
+    return {
+        "noncompliant_count": noncompliant_count,
+        "rules_sample": rules_sample,
+    }
+
+
+def _simulate_evidence_entry(control: str, account_id: str) -> Dict[str, Any]:
+    definition = CONTROL_REGISTRY.get(control)
+    title = definition["title"] if definition else "Unknown Control"
+    language = definition["language"] if definition else ""
+    sources = definition["sources"] if definition else []
+
+    seed = int(hashlib.sha256(f"{account_id}:{control}".encode("utf-8")).hexdigest(), 16)
+    gap_pool = list(_gap_recommendation_map().keys())
+    gaps: List[str] = []
+    if gap_pool and seed % 3 == 0:
+        gaps.append(gap_pool[seed % len(gap_pool)])
+    if gap_pool and seed % 5 == 0:
+        gaps.append(gap_pool[(seed // 7) % len(gap_pool)])
+
+    errors: List[str] = []
+    if seed % 7 == 0:
+        errors.append("AccessDeniedException: Simulated access denied for this API call.")
+    if seed % 11 == 0:
+        errors.append("ValidationException: Simulated validation error.")
+
+    status = status_from_findings(gaps, errors)
+    config_rules = _simulate_config_rules(seed)
+
+    return {
+        "control_id": control,
+        "title": title,
+        "control_language": language,
+        "status": status,
+        "evidence_sources": sources,
+        "collected_at": _utc_timestamp(),
+        "gaps": gaps,
+        "errors": errors,
+        "data": {"config_rules": config_rules},
+    }
+
+
+def _run_simulated_scan(config: ScanConfig) -> Dict[str, Any]:
+    _ensure_output_dir(config.output_dir)
+    run_id = _run_id()
+    run_dir = os.path.join(config.output_dir, run_id)
+    _ensure_output_dir(run_dir)
+
+    regions = config.regions or ["us-east-1"]
+    account_ids, account_map = _simulate_account_ids(config)
+    primary_account_id = account_ids[0] if account_ids else "123456789012"
+    identity = {
+        "account_id": primary_account_id,
+        "arn": f"arn:aws:sts::{primary_account_id}:assumed-role/simulated/session",
+        "identity_error": None,
+    }
+    organization_error: Optional[str] = None
+
+    account_results: List[Dict[str, Any]] = []
+    for account_id in account_ids:
+        evidence_entries = [_simulate_evidence_entry(control, account_id) for control in config.controls]
+        account_results.append(
+            {
+                "account_id": account_id,
+                "account_name": account_map.get(account_id),
+                "caller_arn": f"arn:aws:sts::{account_id}:assumed-role/simulated/session",
+                "identity_error": None,
+                "evidence": evidence_entries,
+            }
+        )
+
+    primary_evidence = account_results[0]["evidence"] if account_results else []
+
+    payload = {
+        "generated_at": _utc_timestamp(),
+        "run_id": run_id,
+        "controls": config.controls,
+        "regions": regions,
+        "account_id": identity["account_id"],
+        "caller_arn": identity["arn"],
+        "identity_error": None,
+        "organization_error": organization_error,
+        "attribution": _report_attribution(),
+        "evidence": primary_evidence,
+        "accounts": account_results if len(account_results) > 1 else [],
+    }
+
+    json_path = os.path.join(run_dir, "evidence.json")
+    with open(json_path, "w", encoding="utf-8") as handle:
+        json.dump(payload, handle, indent=2, sort_keys=True)
+
+    csv_path = os.path.join(run_dir, "evidence_summary.csv")
+    summary_rows: List[Dict[str, Any]] = []
+    for account in account_results:
+        for entry in account.get("evidence", []):
+            config_rules = entry.get("data", {}).get("config_rules", {})
+            noncompliant_rules = [
+                rule.get("name")
+                for rule in config_rules.get("rules_sample", [])
+                if rule.get("compliance") == "NON_COMPLIANT"
+            ]
+            noncompliant_rules_sample = ", ".join(noncompliant_rules[:10])
+            summary_rows.append(
+                {
+                    "account_id": account.get("account_id"),
+                    "account_name": account.get("account_name"),
+                    "control_id": entry.get("control_id"),
+                    "title": entry.get("title"),
+                    "status": entry.get("status"),
+                    "gap_count": len(entry.get("gaps", [])),
+                    "error_count": len(entry.get("errors", [])),
+                    "noncompliant_rule_count": config_rules.get("noncompliant_count", 0),
+                    "noncompliant_rules_sample": noncompliant_rules_sample,
+                }
+            )
+    summary_df = pd.DataFrame(summary_rows)
+    summary_df.to_csv(csv_path, index=False)
+
+    hash_path = _write_hash_file(json_path)
+
+    completeness_path = os.path.join(run_dir, "run_completeness.json")
+    completeness_payload = {
+        "run_id": run_id,
+        "generated_at": payload["generated_at"],
+        "account_id": payload["account_id"],
+        "caller_arn": payload["caller_arn"],
+        "regions": regions,
+        "controls": config.controls,
+        "identity_error": None,
+        "organization_error": organization_error,
+        "account_count": len(account_results),
+        "attribution": _report_attribution(),
+        "narrative": (
+            "This simulated run generates example evidence without contacting AWS. "
+            "Noncompliant values are synthetic and for demonstration only."
+        ),
+        "artifacts": {
+            "evidence_json": os.path.basename(json_path),
+            "evidence_csv": os.path.basename(csv_path),
+            "evidence_hash": os.path.basename(hash_path),
+        },
+    }
+    with open(completeness_path, "w", encoding="utf-8") as handle:
+        json.dump(completeness_payload, handle, indent=2, sort_keys=True)
+    completeness_hash = _write_hash_file(completeness_path)
+
+    summary_path = os.path.join(run_dir, "report_summary.md")
+    remediation_rule_map = {
+        "securityhub-access-keys-rotated-dcc5e306": (
+            "Rotate or deactivate IAM access keys that exceed your rotation policy. "
+            "Remove unused keys and enforce MFA/SSO for users."
+        )
+    }
+
+    summary_lines = [
+        "# SOC 2 Evidence Summary",
+        "",
+        f"- Run ID: {run_id}",
+        f"- Generated at (UTC): {payload['generated_at']}",
+        f"- Account ID: {payload['account_id']}",
+        f"- Caller ARN: {payload['caller_arn']}",
+        f"- Regions: {', '.join(regions)}",
+        f"- Controls: {', '.join(config.controls)}",
+        f"- Account count: {len(account_results)}",
+        f"- Attribution: {_report_attribution()}",
+        "",
+        "## Notes",
+        completeness_payload["narrative"],
+        "",
+        "## Control Results",
+    ]
+
+    for account in account_results:
+        summary_lines.extend(
+            [
+                "",
+                f"### Account {account.get('account_id')}",
+            ]
+        )
+        if account.get("account_name"):
+            summary_lines.append(f"- Name: {account.get('account_name')}")
+        if account.get("identity_error"):
+            summary_lines.append(f"- Identity error: {account.get('identity_error')}")
+        summary_lines.append("")
+
+        for entry in account.get("evidence", []):
+            summary_lines.extend(
+                [
+                    f"#### {entry.get('control_id')} - {entry.get('title')}",
+                    f"- **Status:** {_format_status_value(entry.get('status', 'unknown'))}",
+                    f"- **Control description:** {entry.get('control_language')}",
+                    f"- Summary: {_control_summary(entry)}",
+                    f"- Collected at: {entry.get('collected_at')}",
+                ]
+            )
+
+            issue_rows = _build_issue_rows(entry, remediation_rule_map)
+            if issue_rows:
+                summary_lines.append("")
+                summary_lines.append("| Type | Finding | Recommendation |")
+                summary_lines.append("| --- | --- | --- |")
+                for row in issue_rows:
+                    summary_lines.append(
+                        f"| {row['type']} | {row['item']} | {row['recommendation']} |"
+                    )
+            summary_lines.append("")
+
+    summary_lines.extend(
+        [
+            "## Artifacts",
+            f"- evidence.json",
+            f"- evidence_summary.csv",
+            f"- evidence.json.sha256",
+            f"- run_completeness.json",
+            f"- run_completeness.json.sha256",
+        ]
+    )
+    with open(summary_path, "w", encoding="utf-8") as handle:
+        handle.write("\n".join(summary_lines).strip() + "\n")
+    summary_hash = _write_hash_file(summary_path)
+    pdf_path = _write_pdf_summary(run_dir, payload, account_results, completeness_payload)
+    pdf_hash = _write_hash_file(pdf_path) if pdf_path else None
+
+    return {
+        "artifacts": [
+            json_path,
+            csv_path,
+            hash_path,
+            completeness_path,
+            completeness_hash,
+            summary_path,
+            summary_hash,
+            *(path for path in [pdf_path, pdf_hash] if path),
+        ],
+        "identity_error": None,
+    }
 
 
 def _write_pdf_summary(
@@ -528,6 +793,9 @@ def _build_evidence_entries(
 
 
 def run_scan(config: ScanConfig) -> Dict[str, Any]:
+    if config.simulate:
+        return _run_simulated_scan(config)
+
     _ensure_output_dir(config.output_dir)
     run_id = _run_id()
     run_dir = os.path.join(config.output_dir, run_id)

@@ -61,6 +61,8 @@ def _merge_cli_config(args: argparse.Namespace) -> Dict[str, Any]:
         config["all_accounts"] = True
     _set_if(args.role_name, "role_name")
     _set_if(args.external_id, "external_id")
+    if args.simulate:
+        config["simulate"] = True
     if args.external_ids:
         config["external_ids"] = _validate_external_ids(json.loads(args.external_ids))
     return config
@@ -113,6 +115,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--external-ids",
         help="JSON map of account_id to external_id",
     )
+    parser.add_argument(
+        "--simulate",
+        action="store_true",
+        help="Run a simulated scan without AWS API calls",
+    )
     return parser
 
 
@@ -138,11 +145,14 @@ def main() -> None:
         role_name=merged.get("role_name") or "OrganizationAccountAccessRole",
         external_id=merged.get("external_id"),
         external_ids=_validate_external_ids(merged.get("external_ids")),
+        simulate=bool(merged.get("simulate")),
     )
 
     result = run_scan(config)
-    print("Evidence report created:")
-    for path in result["artifacts"]:
+    artifacts = result["artifacts"]
+    run_dir = os.path.dirname(artifacts[0]) if artifacts else config.output_dir
+    print(f"Evidence report created in: {run_dir}")
+    for path in artifacts:
         print(f"- {path}")
     if result.get("identity_error"):
         print("Warning: unable to resolve AWS account identity.")

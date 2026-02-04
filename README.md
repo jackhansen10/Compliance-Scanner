@@ -62,6 +62,18 @@ Run the scanner with defaults:
 python -m soc2_scanner
 ```
 
+Run a simulated scan (no AWS API calls) to explore output formats:
+
+```bash
+python -m soc2_scanner --simulate --regions us-east-1 --controls CC1,CC3 --output ./reports
+```
+
+You can also use `--account-ids` or `--all-accounts` with `--simulate` to see
+how multi-account output changes.
+
+Tip: choose a non-hidden location like `./reports` or `~/Documents/reports` if
+you want to browse results in Finder.
+
 Specify controls, regions, and output directory:
 
 ```bash
