@@ -49,9 +49,10 @@ class ScannerOutputTests(unittest.TestCase):
 
                             result = run_scan(config)
 
-            json_path = os.path.join(tmp_dir, "evidence.json")
-            csv_path = os.path.join(tmp_dir, "evidence_summary.csv")
-            hash_path = os.path.join(tmp_dir, "evidence.json.sha256")
+            run_dir = os.path.dirname(result["artifacts"][0])
+            json_path = os.path.join(run_dir, "evidence.json")
+            csv_path = os.path.join(run_dir, "evidence_summary.csv")
+            hash_path = os.path.join(run_dir, "evidence.json.sha256")
 
             self.assertIn(json_path, result["artifacts"])
             self.assertTrue(os.path.exists(json_path))
